@@ -55,11 +55,36 @@ async function createUser(username, email, password) {
     }
 }
 
-function askQuestion(question) {
+function askQuestion(question, hidden = false) {
     return new Promise((resolve) => {
-        rl.question(question, (answer) => {
-            resolve(answer);
-        });
+        if (hidden) {
+            process.stdin.setRawMode(true);
+            process.stdin.resume();
+            process.stdin.setEncoding('utf8');
+
+            let input = '';
+            process.stdin.on('data', (char) => {
+                char = char.toString();
+                if (char === '\n' || char === '\r' || char === '\u0004') {
+                    process.stdin.setRawMode(false);
+                    console.log('');
+                    process.stdin.pause();
+                    resolve(input);
+                } else if (char === '\u0008' || char === '\u007F') {
+                    input = input.slice(0, -1);
+                    process.stdout.clearLine();
+                    process.stdout.cursorTo(0);
+                    process.stdout.write(question + '*'.repeat(input.length));
+                } else {
+                    input += char;
+                    process.stdout.write('*');
+                }
+            });
+        } else {
+            rl.question(question, (answer) => {
+                resolve(answer);
+            });
+        }
     });
 }
 
@@ -71,7 +96,7 @@ function isValidEmail(email) {
 async function main() {
     const args = parseArguments();
     
-    let username, email, password;
+    let username, email, password, confirmPassword;
 
     if (args.username && args.email && args.password) {
         username = args.username;
@@ -90,7 +115,14 @@ async function main() {
             return;
         }
 
-        password = await askQuestion("Password: ");
+        do {
+            password = await askQuestion("Password: ", true);
+            confirmPassword = await askQuestion("Confirm Password: ", true);
+            
+            if (password !== confirmPassword) {
+                log.error("Passwords do not match! Please try again.");
+            }
+        } while (password !== confirmPassword);
     }
 
     const userExists = await doesUserExist(username);
